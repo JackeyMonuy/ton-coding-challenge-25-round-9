@@ -1,0 +1,42 @@
+#include "imports/stdlib.fc";
+
+const MY_WORKCHAIN = BASECHAIN;
+const op::join = "join"c; ;; 9b31d2ef
+const op::draw = "draw"c; ;; a883b102
+
+int participants;
+int lastWinner;
+
+() join_lottery() impure inline {
+    participants += 1;
+}
+
+() draw_winner() impure inline {
+    throw_unless(1003, participants > 0);
+    lastWinner = now() % participants;
+}
+
+() route_internal(slice ctx::sender, int ctx::value, int ctx::fwd_fee, slice ctx::body) impure inline {
+    (int op, int query_id) = ctx::body~load_op_and_query_id();
+
+    if op == op::join {
+        join_lottery();
+        return ();
+    }
+
+    if op == op::draw {
+        draw_winner();
+        return ();
+    }
+
+    throw(0xffff);
+}
+
+() main(int ctx::value, cell in_msg_full, slice ctx::body) impure {
+    slice s = in_msg_full.begin_parse();
+    int flags = s~load_msg_flags();
+    if (is_bounced(flags)) { return (); }
+
+    (slice ctx::sender, int ctx::fwd_fee) = s~retrieve_ctx(MY_WORKCHAIN);
+    route_internal(ctx::sender, ctx::value, ctx::fwd_fee, ctx::body);
+}
